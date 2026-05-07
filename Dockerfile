@@ -1,55 +1,27 @@
-FROM debian:bookworm-slim
+FROM ghcr.io/linuxserver/baseimage-kasmvnc:alpine320
 
-ENV DEBIAN_FRONTEND=noninteractive \
-    LANG=en_US.UTF-8 \
-    LANGUAGE=en_US:en \
-    LC_ALL=en_US.UTF-8
+# 1. Environment variables (No flags needed at runtime)
+ENV TZ=Asia/Makassar
+ENV PUID=1000
+ENV PGID=1000
+ENV TITLE="Minimal Edge App"
+ENV CUSTOM_USER=admin
+ENV PASSWORD=password123
 
-# Copy install and remove teneo
-COPY Teneo.Beacon_0.4.2_amd64.deb /tmp/
+# 2. Install your application
+# (Replacing 'mousepad' with whatever app you actually need)
+RUN apk add --no-cache mousepad
 
-RUN apt install /tmp/Teneo.Beacon_0.4.2_amd64.deb || apt-get install -f -y && rm /tmp/Teneo.Beacon_0.4.2_amd64.deb
+# 3. The "Pseudo-Entrypoint" logic
+# We create the directory and the autostart file.
+# The '&' is important if you want to run multiple things, 
+# but for one app, the name alone is enough.
+RUN mkdir -p /defaults && \
+    echo "mousepad" > /defaults/autostart && \
+    chmod +x /defaults/autostart
 
-# Install ultra-light desktop stack
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    openssh-server \
-    tigervnc-standalone-server \
-    tigervnc-tools \
-    openbox \
-    micro \
-    pcmanfm \
-    xterm \
-    dbus-x11 \
-    sudo \
-    locales \
-    && locale-gen en_US.UTF-8 \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* \
-    # Strip docs, man pages, and non-English locales
-    && rm -rf /usr/share/doc/* /usr/share/man/* \
-    && find /usr/share/locale -mindepth 1 -maxdepth 1 \
-       -not -name 'en*' -not -name 'locale.alias' \
-       -exec rm -rf {} + 2>/dev/null || true
+# 4. Standard Port
+EXPOSE 3000
 
-# Generate SSH host keys
-RUN ssh-keygen -A
-
-# Create non-root user
-RUN useradd -m -s /bin/bash -G sudo desktopuser
-
-ENV SSH_PASSWORD=12345 \
-    VNC_PASSWORD=12345
-
-# Setup VNC startup script (WM + file manager + terminal)
-USER desktopuser
-RUN mkdir -p ~/.vnc && \
-    printf '#!/bin/sh\nopenbox-session &\npcmanfm --desktop &\nxterm &\nwait\n' > ~/.vnc/xstartup && \
-    chmod +x ~/.vnc/xstartup
-USER root
-
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-
-ENTRYPOINT ["/entrypoint.sh"]
-EXPOSE 22 5901
+# NOTE: No ENTRYPOINT or CMD here. 
+# The base image's inherited S6-init handles the boot sequence.
